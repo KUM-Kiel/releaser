@@ -1,0 +1,109 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Releaser</title>
+<style>
+html {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+</style>
+</head>
+<body>
+<div>
+  <h1>Releaser</h1>
+  <p>Enter a code:</p>
+  <input type="number"/> <button>Play</button>
+</div>
+<script>
+const input = document.querySelector('input')
+const button = document.querySelector	('button')
+const freqencies = {
+  low: {
+    '1': [9488, 9901],
+    '2': [9488, 10288],
+    '3': [9488, 10684],
+    '4': [9901, 10288],
+    '5': [9901, 10684],
+    '6': [10288, 10684]
+  },
+  high: {
+    '1': [17483, 17986],
+    '2': [17483, 18506],
+    '3': [17483, 19321],
+    '4': [17986, 18506],
+    '5': [17986, 19321],
+    '6': [18506, 19321]
+  }
+}
+const parseCode = code => {
+  if (!/^[1-6][0-7]{5}$/.test(code)) {
+    return null
+  }
+  const bits = []
+  for (let i = 1; i < 6; ++i) {
+    const c = +code[i]
+    bits.push((c >> 2) & 1)
+    bits.push((c >> 1) & 1)
+    bits.push((c >> 0) & 1)
+  }
+  let parity = 0
+  for (let i = 0; i < bits.length; ++i) {
+    parity ^= bits[i]
+  }
+  bits.push(parity)
+  return {bits, f: freqencies.low[code[0]]}
+}
+const fillBuffer = (buffer, code, rate) => {
+  for (let i = 0; i < buffer.length; ++i) {
+    buffer[i] = 0
+  }
+  let p = rate / 2
+  const pulse = 80 * rate / 1000
+  const window = []
+  const slope1 = pulse / 10
+  const slope2 = pulse / 3
+  const amplitude = 0.5
+  for (let i = 0; i < pulse; ++i) {
+    if (i < slope1) {
+      window.push(0.5 * (1 - Math.cos(2 * Math.PI * i / (2 * slope1))))
+    } else if (i >= pulse - slope2) {
+      window.push(0.5 * (1 - Math.cos(2 * Math.PI * (pulse - i - 1) / (2 * slope2))))
+    } else {
+      window.push(1)
+    }
+  }
+  for (let i = 0; i < 16; ++i) {
+    for (let j = 0; j < pulse; ++j) {
+      buffer[p + j] = Math.sin(2 * Math.PI * j * code.f[code.bits[i]] / rate) * window[j] * amplitude
+    }
+    p += rate / 4
+    if (i == 7) {
+      p += rate * 5
+    }
+  }
+}
+const play = code => {
+  const ctx = new AudioContext()
+  const buffer = ctx.createBuffer(1, 10 * ctx.sampleRate, ctx.sampleRate)
+  const array = new Float32Array(10 * ctx.sampleRate)
+  fillBuffer(array, code, ctx.sampleRate)
+  buffer.copyToChannel(array, 0)
+  const source = ctx.createBufferSource()
+  source.buffer = buffer
+  source.connect(ctx.destination)
+  source.start()
+}
+button.addEventListener('click', () => {
+  const code = parseCode(input.value)
+  if (code !== null) {
+    play(code)
+  } else {
+    alert('Invalid code!')
+  }
+})
+</script>
+</body>
+</html>
